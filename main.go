@@ -119,10 +119,11 @@ type JsonMainRequest struct {
 		Bundle string `json:"bundle"`
 	} `json:"app"`
 	Device struct {
+		Ifa string `json:"ifa"`
+		Os  string `json:"os"`
 		Geo struct {
 			Country  string `json:"country"`
 		} `json:"geo"`
-		Os string `json:"os"`
 	} `json:"device"`
 }
 
