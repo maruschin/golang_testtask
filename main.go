@@ -23,6 +23,7 @@ const timeOut = 600
 const httpBadRequest = 400
 const httpOk         = 200
 
+
 func main() {
     http.HandleFunc("/", GetSomething)
     http.HandleFunc("/stats", GetStatistics)
@@ -32,8 +33,6 @@ func main() {
 
 
 func GetSomething(w http.ResponseWriter, r *http.Request) {
-
-    //fmt.Fprintf(w, "Hello, %q\n", html.EscapeString(r.URL.Path))
 
     var req JsonMainRequest
     var res JsonMainResponse
@@ -48,7 +47,7 @@ func GetSomething(w http.ResponseWriter, r *http.Request) {
     //fmt.Fprintf(w, "App: %q\n", req.App.Bundle)
     //fmt.Fprintf(w, "Platform: %q\n", req.Device.Os)
 
-    count := ExampleNewClient(req.Device.Ifa)
+    count := ExampleNewClient(&req)
     res.Pos = count
     valueB, _ := json.Marshal(&res)
     fmt.Fprintf(w, "%s\n", string(valueB))
@@ -60,44 +59,50 @@ func GetStatistics(w http.ResponseWriter, r *http.Request) {
 }
 
 
-func ExampleNewClient(key string) int {
+func InitValue(ifa *IfaData) string {
+	ifa.Count = 1
+	ifa.Time  = int(time.Now().Unix())
+	valueB, _ := json.Marshal(&ifa)
+	return string(valueB)
+}
+
+
+func ExampleNewClient(request *JsonMainRequest) int {
+	var ifa IfaData
+
     client := redis.NewClient(&redis.Options{
         Addr:     "localhost:6379",
         Password: "", // no password set
         DB:       0, // use default DB
     })
+    
+    key := request.Device.Ifa
 
-    var ifa IfaData
-
-    time := int(time.Now().Unix())
+    // Если ключа в БД нет, то заносим первичные данные
     val, err := client.Get(key).Result()
-
     if err == redis.Nil {
-    	ifa.Count = 1
-    	ifa.Time = time
-    	valueB, _ := json.Marshal(&ifa)
-    	err := client.Set(key, string(valueB), 0).Err()
+    	val = InitValue(&ifa)
+    	err := client.Set(key, val, 0).Err()
     	if err != nil {
     		panic(err)
     	}
-    	fmt.Println("Новый ключ: ", key, string(valueB))
     }
 
-    fmt.Println("ДО", key, val)
-
+    // Разбираем запрос в структуру
     json.Unmarshal([]byte(val), &ifa)
-    fmt.Println(ifa.Count, ifa.Time)
 
+    currentTime := int(time.Now().Unix())
+    timeDelta := currentTime - ifa.Time
 
-    timeDelta := time - ifa.Time
     if timeSameRequest < timeDelta {
     	ifa.Count++
-    	ifa.Time = time
+    	ifa.Time = currentTime
     }
 	if timeOut < timeDelta {
 		ifa.Count = 0
 	}
 
+	// Кладем данные обратно в Redis
     valueB, _ := json.Marshal(&ifa)
     val = string(valueB)
     err = client.Set(key, val, 0).Err()
@@ -105,10 +110,8 @@ func ExampleNewClient(key string) int {
     	panic(err)
     }
 
-    fmt.Println("После", key, val)
+    fmt.Println(key, val)
 
-    //pong, err := client.Ping().Result()
-    //fmt.Println(pong, err)
     return ifa.Count
 }
 
