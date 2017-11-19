@@ -1,14 +1,11 @@
 package main
 
+
 import (
 	"encoding/json"
-	//"string"
     "fmt"
-    //"html"
     "log"
     "time"
-    //"os"
-    //"io/ioutil"
     "net/http"
     "github.com/go-redis/redis"
 )
@@ -18,7 +15,6 @@ import (
 const timeSameRequest = 5
 // Время, после которого необходимо обнулять счетчик
 const timeOut = 600
-
 // Коды статусов ответов HTTP
 const httpBadRequest = 400
 const httpOk         = 200
@@ -33,19 +29,15 @@ func main() {
 
 
 func GetSomething(w http.ResponseWriter, r *http.Request) {
-
+	
     var req JsonMainRequest
     var res JsonMainResponse
+
     err := json.NewDecoder(r.Body).Decode(&req)
     if err != nil {
     	w.WriteHeader(httpBadRequest)
     	return
     }
-
-    //fmt.Fprintf(w, "Ifa: %q\n", req.Device.Ifa)
-    //fmt.Fprintf(w, "Country: %q\n", req.Device.Geo.Country)
-    //fmt.Fprintf(w, "App: %q\n", req.App.Bundle)
-    //fmt.Fprintf(w, "Platform: %q\n", req.Device.Os)
 
     count := ExampleNewClient(&req)
     res.Pos = count
@@ -75,7 +67,7 @@ func ExampleNewClient(request *JsonMainRequest) int {
         Password: "", // no password set
         DB:       0, // use default DB
     })
-    
+
     key := request.Device.Ifa
 
     // Если ключа в БД нет, то заносим первичные данные
