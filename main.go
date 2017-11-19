@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	//"string"
     "fmt"
-    "html"
+    //"html"
     "log"
     "time"
     //"os"
@@ -13,6 +13,15 @@ import (
     "github.com/go-redis/redis"
 )
 
+
+// Время, в рамках которого, все запросы будем принимать за один
+const timeSameRequest = 5
+// Время, после которого необходимо обнулять счетчик
+const timeOut = 600
+
+// Коды статусов ответов HTTP
+const httpBadRequest = 400
+const httpOk         = 200
 
 func main() {
     http.HandleFunc("/", GetSomething)
@@ -24,20 +33,25 @@ func main() {
 
 func GetSomething(w http.ResponseWriter, r *http.Request) {
 
-    fmt.Fprintf(w, "Hello, %q\n", html.EscapeString(r.URL.Path))
+    //fmt.Fprintf(w, "Hello, %q\n", html.EscapeString(r.URL.Path))
 
     var req JsonMainRequest
+    var res JsonMainResponse
     err := json.NewDecoder(r.Body).Decode(&req)
     if err != nil {
-    	w.WriteHeader(400)
+    	w.WriteHeader(httpBadRequest)
     	return
     }
 
-    fmt.Fprintf(w, "Ifa: %q\n", req.Device.Ifa)
-    fmt.Fprintf(w, "Country: %q\n", req.Device.Geo.Country)
-    fmt.Fprintf(w, "App: %q\n", req.App.Bundle)
-    fmt.Fprintf(w, "Platform: %q\n", req.Device.Os)
-    ExampleNewClient(req.Device.Ifa)
+    //fmt.Fprintf(w, "Ifa: %q\n", req.Device.Ifa)
+    //fmt.Fprintf(w, "Country: %q\n", req.Device.Geo.Country)
+    //fmt.Fprintf(w, "App: %q\n", req.App.Bundle)
+    //fmt.Fprintf(w, "Platform: %q\n", req.Device.Os)
+
+    count := ExampleNewClient(req.Device.Ifa)
+    res.Pos = count
+    valueB, _ := json.Marshal(&res)
+    fmt.Fprintf(w, "%s\n", string(valueB))
 }
 
 
@@ -46,7 +60,7 @@ func GetStatistics(w http.ResponseWriter, r *http.Request) {
 }
 
 
-func ExampleNewClient(key string) {
+func ExampleNewClient(key string) int {
     client := redis.NewClient(&redis.Options{
         Addr:     "localhost:6379",
         Password: "", // no password set
@@ -61,12 +75,12 @@ func ExampleNewClient(key string) {
     if err == redis.Nil {
     	ifa.Count = 1
     	ifa.Time = time
-    	val, _ := json.Marshal(&ifa)
-    	err := client.Set(key, val, 0).Err()
+    	valueB, _ := json.Marshal(&ifa)
+    	err := client.Set(key, string(valueB), 0).Err()
     	if err != nil {
     		panic(err)
     	}
-    	fmt.Println("Новый ключ: ", key, val)
+    	fmt.Println("Новый ключ: ", key, string(valueB))
     }
 
     fmt.Println("ДО", key, val)
@@ -74,10 +88,16 @@ func ExampleNewClient(key string) {
     json.Unmarshal([]byte(val), &ifa)
     fmt.Println(ifa.Count, ifa.Time)
 
-    if time - ifa.Time > 5 {
+
+    timeDelta := time - ifa.Time
+    if timeSameRequest < timeDelta {
     	ifa.Count++
     	ifa.Time = time
     }
+	if timeOut < timeDelta {
+		ifa.Count = 0
+	}
+
     valueB, _ := json.Marshal(&ifa)
     val = string(valueB)
     err = client.Set(key, val, 0).Err()
@@ -89,6 +109,7 @@ func ExampleNewClient(key string) {
 
     //pong, err := client.Ping().Result()
     //fmt.Println(pong, err)
+    return ifa.Count
 }
 
 
