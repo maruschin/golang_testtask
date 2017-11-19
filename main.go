@@ -8,6 +8,8 @@ import (
     "time"
     "net/http"
     "github.com/go-redis/redis"
+    "crypto/md5"
+    "encoding/hex"
 )
 
 
@@ -59,6 +61,20 @@ func InitValue(ifa *IfaData) string {
 }
 
 
+func MakeKeyForStatistics(request *JsonMainRequest) string {
+	// Из реквизитов запроса делаем md5 сумму для хранения
+	// статистики в БД
+	str := fmt.Sprintf(
+		"Country-%sPlatform-%sApplication%s",
+		request.Device.Geo.Country,
+		request.Device.Os,
+		request.App.Bundle)
+	hasher := md5.New()
+	hasher.Write([]byte(str))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+
 func ExampleNewClient(request *JsonMainRequest) int {
 	var ifa IfaData
 
@@ -69,6 +85,8 @@ func ExampleNewClient(request *JsonMainRequest) int {
     })
 
     key := request.Device.Ifa
+    statKey := MakeKeyForStatistics(request)
+    fmt.Println(statKey)
 
     // Если ключа в БД нет, то заносим первичные данные
     val, err := client.Get(key).Result()
