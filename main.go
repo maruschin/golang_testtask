@@ -25,6 +25,12 @@ const httpOk         = 200
 const keyDontExist   = -2
 const keyNeverExpire = -1
 
+// Настройки Redis
+const RedisAddr     = "localhost:6379"
+const RedisPassword = "" // no password set
+const RedisDB       = 0  // use default DB
+
+
 
 func main() {
     http.HandleFunc("/", mainRequestHandler)
@@ -71,16 +77,30 @@ func MakeKeyForStatistics(request *JsonMainRequest) string {
 }
 
 
+func setStat(request *JsonMainRequest) error {
+	client := redis.NewClient(&redis.Options{
+        Addr:     RedisAddr,
+        Password: RedisPassword,
+        DB:       RedisDB, 
+    })
+
+    //key := MakeKeyForStatistics(request)
+
+    client.Ping()
+
+    return nil
+}
+
+
 func getCount(request *JsonMainRequest) string {
 
     client := redis.NewClient(&redis.Options{
-        Addr:     "localhost:6379",
-        Password: "", // no password set
-        DB:       0, // use default DB
+        Addr:     RedisAddr,
+        Password: RedisPassword, 
+        DB:       RedisDB,
     })
 
     key := request.Device.Ifa
-    //statKey := MakeKeyForStatistics(request)
 
     timeExpire, _ := client.TTL(key).Result()
     if timeExpire == keyDontExist {
@@ -103,7 +123,7 @@ func getCount(request *JsonMainRequest) string {
 
     count, _ := client.Get(key).Result()
 
-    fmt.Println(key, timeExpire, value)
+    fmt.Println(key, timeExpire, count)
 
     return count
 }
