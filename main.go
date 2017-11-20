@@ -85,10 +85,12 @@ func setStat(request *JsonMainRequest) error {
         DB:       RedisDB, 
     })
 
-    string statKey = "stats:all:keys"
-    string key = MakeKeyForStatistics(request)
+    var statKey string = "stats:all:keys"
+    var key     string = MakeKeyForStatistics(request)
 
-    client.SAdd(statKey, key)
+    if err := client.SAdd(statKey, key).Err(); err != nil {
+    	panic(err)
+    }
 
     // Проверяем ключ на наличие и в случае отсутствия, вносим данные
     if val, _ := client.Exists(key).Result(); val == 0 {
@@ -97,10 +99,12 @@ func setStat(request *JsonMainRequest) error {
         client.HSet(key, "app",      request.App.Bundle).Err()
     }
 
-    client.HIncrBy(key, "count", 1)
+    if err := client.HIncrBy(key, "count", 1).Err(); err != nil {
+    	panic(err)
+    }
 
-    fmt.Println(client.HGetAll(key).Result())
-    fmt.Println(client.SMembers(statKey).Result())
+    //fmt.Println(client.HGetAll(key).Result())
+    //fmt.Println(client.SMembers(statKey).Result())
 
     return nil
 }
@@ -114,7 +118,7 @@ func getCount(request *JsonMainRequest) string {
         DB:       RedisDB,
     })
 
-    string key = request.Device.Ifa
+    var key string = request.Device.Ifa
 
     timeExpire, _ := client.TTL(key).Result()
     if timeExpire == keyDontExist {
