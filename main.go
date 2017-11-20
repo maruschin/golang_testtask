@@ -92,36 +92,27 @@ func MakeKeyForStatistics(request *JsonMainRequest) string {
 
 func getStat(response *JsonStatResponse) error {
 
-	client := redis.NewClient(&redis.Options{
-		Addr:     RedisAddr,
-		Password: RedisPassword,
-		DB:       RedisDB,
-	})
+    client := redis.NewClient(&redis.Options{
+        Addr:     RedisAddr,
+        Password: RedisPassword,
+        DB:       RedisDB,
+    })
 
-	var keys []string
-	var err error
-	keys, err = client.SMembers(statKey).Result()
+    keys, _ := client.SMembers(statKey).Result()
 
-	fmt.Println(keys[0])
+    for _, key := range keys {
+        entry, _ := client.HGetAll(key).Result()
+        count, _ := strconv.Atoi(entry["count"])
+        structEntry := JsonStatStatistics{
+            Platform: entry["platform"],
+            App:      entry["app"],
+            Country:  entry["country"],
+            Count:    count,
+        }
+        response.Statistics = append(response.Statistics, structEntry)
+    }
 
-	val, _ := client.HGetAll(keys[0]).Result()
-
-	count, _ := strconv.Atoi(val["count"])
-
-	response.Statistics = append(response.Statistics, 
-		JsonStatStatistics{Platform: val["platform"],
-	                             App:      val["app"],
-	                             Country:  val["country"],
-	                             Count:    count, })
-
-	fmt.Println(val["platform"])
-	fmt.Println(val["app"])
-	fmt.Println(val["country"])
-	fmt.Println(val["count"])
-	fmt.Println(val)
-	fmt.Println(keys, err)
-
-	return nil
+    return nil
 }
 
 
@@ -149,9 +140,6 @@ func setStat(request *JsonMainRequest) error {
     if err := client.HIncrBy(key, "count", 1).Err(); err != nil {
     	panic(err)
     }
-
-    //fmt.Println(client.HGetAll(key).Result())
-    //fmt.Println(client.SMembers(statKey).Result())
 
     return nil
 }
@@ -187,8 +175,6 @@ func getCount(request *JsonMainRequest) string {
     }
 
     count, _ := client.Get(key).Result()
-
-    fmt.Println(key, timeExpire, count)
 
     return count
 }
