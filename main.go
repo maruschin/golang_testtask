@@ -51,7 +51,7 @@ func mainRequestHandler(w http.ResponseWriter, r *http.Request) {
     }
 
     res.Pos = getCount(&req)
-    //setStat(&req)
+    setStat(&req)
     valueB, _ := json.Marshal(&res)
 
     fmt.Fprintf(w, "%s\n", string(valueB))
@@ -78,15 +78,25 @@ func MakeKeyForStatistics(request *JsonMainRequest) string {
 
 
 func setStat(request *JsonMainRequest) error {
+
 	client := redis.NewClient(&redis.Options{
         Addr:     RedisAddr,
         Password: RedisPassword,
         DB:       RedisDB, 
     })
 
-    //key := MakeKeyForStatistics(request)
+    key := MakeKeyForStatistics(request)
 
-    client.Ping()
+    // Проверяем ключ на наличие и в случае отсутствия, вносим данные
+    if val, _ := client.Exists(key).Result(); val == 0 {
+    	client.HSet(key, "country",  request.Device.Geo.Country)
+    	client.HSet(key, "platform", request.Device.Os)
+    	client.HSet(key, "app",      request.App.Bundle)
+    }
+
+    client.HIncrBy(key, "count", 1)
+
+    fmt.Println(client.HGetAll(key).Result())
 
     return nil
 }
