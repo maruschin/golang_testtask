@@ -14,50 +14,45 @@ import (
 
 
 // Время, в рамках которого, все запросы будем принимать за один
-const timeSameRequest = 5
+const timeSameRequest = time.Second * 5
 // Время, после которого необходимо обнулять счетчик
-const timeOut = 600
+const timeOut = time.Minute * 10
 // Коды статусов ответов HTTP
 const httpBadRequest = 400
 const httpOk         = 200
 
+// Коды возвратов Redis
+const keyDontExist   = -2
+const keyNeverExpire = -1
+
 
 func main() {
-    http.HandleFunc("/", GetSomething)
-    http.HandleFunc("/stats", GetStatistics)
+    http.HandleFunc("/", mainRequestHandler)
+    http.HandleFunc("/stats", statisticsRequestHandler)
 
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 
-func GetSomething(w http.ResponseWriter, r *http.Request) {
+func mainRequestHandler(w http.ResponseWriter, r *http.Request) {
 
     var req JsonMainRequest
     var res JsonMainResponse
-
-    err := json.NewDecoder(r.Body).Decode(&req)
-    if err != nil {
+    
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
     	w.WriteHeader(httpBadRequest)
     	return
     }
 
-    count := ExampleNewClient(&req)
-    res.Pos = count
+    res.Pos = getContFromDB(&req)
     valueB, _ := json.Marshal(&res)
+    
     fmt.Fprintf(w, "%s\n", string(valueB))
 }
 
 
-func GetStatistics(w http.ResponseWriter, r *http.Request) {
+func statisticsRequestHandler(w http.ResponseWriter, r *http.Request) {
     fmt.Fprintf(w, "Hello, take statistics")
-}
-
-
-func InitValue(ifa *IfaData) string {
-	ifa.Count = 1
-	ifa.Time  = int(time.Now().Unix())
-	valueB, _ := json.Marshal(&ifa)
-	return string(valueB)
 }
 
 
@@ -75,8 +70,7 @@ func MakeKeyForStatistics(request *JsonMainRequest) string {
 }
 
 
-func ExampleNewClient(request *JsonMainRequest) int {
-	var ifa IfaData
+func getContFromDB(request *JsonMainRequest) string {
 
     client := redis.NewClient(&redis.Options{
         Addr:     "localhost:6379",
@@ -85,50 +79,32 @@ func ExampleNewClient(request *JsonMainRequest) int {
     })
 
     key := request.Device.Ifa
-    statKey := MakeKeyForStatistics(request)
-    fmt.Println(statKey)
+    //statKey := MakeKeyForStatistics(request)
 
-    // Если ключа в БД нет, то заносим первичные данные
-    val, err := client.Get(key).Result()
-    if err == redis.Nil {
-    	val = InitValue(&ifa)
-    	err := client.Set(key, val, 0).Err()
-    	if err != nil {
+    timeExpire, _ := client.TTL(key).Result()
+    if timeExpire == keyDontExist {
+    	if err := client.Incr(key).Err(); err != nil {
+    		panic(err)
+    	}
+    	if err := client.Expire(key, timeOut).Err(); err != nil {
+    		panic(err)
+    	}
+    } else {
+    	if timeOut - timeExpire > timeSameRequest {
+    		if err := client.Incr(key).Err(); err != nil {
+    			panic(err)
+    		}
+    	}
+    	if err := client.Expire(key, timeOut).Err(); err != nil {
     		panic(err)
     	}
     }
 
-    // Разбираем запрос в структуру
-    json.Unmarshal([]byte(val), &ifa)
+    value, _ := client.Get(key).Result()
 
-    currentTime := int(time.Now().Unix())
-    timeDelta := currentTime - ifa.Time
+    fmt.Println(key, timeExpire, value)
 
-    if timeSameRequest < timeDelta {
-    	ifa.Count++
-    	ifa.Time = currentTime
-    }
-	if timeOut < timeDelta {
-		ifa.Count = 0
-	}
-
-	// Кладем данные обратно в Redis
-    valueB, _ := json.Marshal(&ifa)
-    val = string(valueB)
-    err = client.Set(key, val, 0).Err()
-    if err != nil {
-    	panic(err)
-    }
-
-    fmt.Println(key, val)
-
-    return ifa.Count
-}
-
-
-type IfaData struct {
-	Count int `json:"count"`
-	Time  int `json:"time"`
+    return value
 }
 
 
@@ -147,7 +123,7 @@ type JsonMainRequest struct {
 
 
 type JsonMainResponse struct {
-	Pos int `json:"pos"`
+	Pos string `json:"pos"`
 }
 
 
