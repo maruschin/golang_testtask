@@ -6,6 +6,7 @@ import (
     "fmt"
     "log"
     "time"
+    "strconv"
     "net/http"
     "github.com/go-redis/redis"
     "crypto/md5"
@@ -29,6 +30,9 @@ const keyNeverExpire = -1
 const RedisAddr     = "localhost:6379"
 const RedisPassword = "" // no password set
 const RedisDB       = 0  // use default DB
+
+// Другие настройки
+const statKey = "stats:all:keys"
 
 
 
@@ -59,7 +63,16 @@ func mainRequestHandler(w http.ResponseWriter, r *http.Request) {
 
 
 func statisticsRequestHandler(w http.ResponseWriter, r *http.Request) {
-    fmt.Fprintf(w, "Hello, take statistics")
+
+	var res JsonStatResponse
+
+	if err := getStat(&res); err != nil {
+		panic(err)
+	}
+
+	valueB, _ := json.Marshal(&res)
+
+	fmt.Fprintf(w, "%s\n", string(valueB))
 }
 
 
@@ -77,6 +90,41 @@ func MakeKeyForStatistics(request *JsonMainRequest) string {
 }
 
 
+func getStat(response *JsonStatResponse) error {
+
+	client := redis.NewClient(&redis.Options{
+		Addr:     RedisAddr,
+		Password: RedisPassword,
+		DB:       RedisDB,
+	})
+
+	var keys []string
+	var err error
+	keys, err = client.SMembers(statKey).Result()
+
+	fmt.Println(keys[0])
+
+	val, _ := client.HGetAll(keys[0]).Result()
+
+	count, _ := strconv.Atoi(val["count"])
+
+	response.Statistics = append(response.Statistics, 
+		JsonStatStatistics{Platform: val["platform"],
+	                             App:      val["app"],
+	                             Country:  val["country"],
+	                             Count:    count, })
+
+	fmt.Println(val["platform"])
+	fmt.Println(val["app"])
+	fmt.Println(val["country"])
+	fmt.Println(val["count"])
+	fmt.Println(val)
+	fmt.Println(keys, err)
+
+	return nil
+}
+
+
 func setStat(request *JsonMainRequest) error {
 
     client := redis.NewClient(&redis.Options{
@@ -85,8 +133,7 @@ func setStat(request *JsonMainRequest) error {
         DB:       RedisDB, 
     })
 
-    var statKey string = "stats:all:keys"
-    var key     string = MakeKeyForStatistics(request)
+    var key string = MakeKeyForStatistics(request)
 
     if err := client.SAdd(statKey, key).Err(); err != nil {
     	panic(err)
@@ -167,10 +214,12 @@ type JsonMainResponse struct {
 
 
 type JsonStatResponse struct {
-    Statistics []struct {
-        Country  string `json:"country"`
-        App      string `json:"app"`
-        Platform string `json:"platform"`
-        Count    int    `json:"count"`
-    } `json:"Statistics"`
+    Statistics []JsonStatStatistics `json:"statistics"`
+}
+
+type JsonStatStatistics struct {
+    Country  string `json:"country"`
+    App      string `json:"app"`
+    Platform string `json:"platform"`
+    Count    int    `json:"count"`
 }
