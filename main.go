@@ -2,7 +2,7 @@ package main
 
 
 import (
-	"encoding/json"
+    "encoding/json"
     "fmt"
     "log"
     "time"
@@ -46,8 +46,8 @@ func mainRequestHandler(w http.ResponseWriter, r *http.Request) {
     var res JsonMainResponse
     
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-    	w.WriteHeader(httpBadRequest)
-    	return
+        w.WriteHeader(httpBadRequest)
+        return
     }
 
     res.Pos = getCount(&req)
@@ -64,39 +64,43 @@ func statisticsRequestHandler(w http.ResponseWriter, r *http.Request) {
 
 
 func MakeKeyForStatistics(request *JsonMainRequest) string {
-	// Из реквизитов запроса делаем md5 сумму для хранения
-	// статистики в БД
-	str := fmt.Sprintf(
-		"Country-%sPlatform-%sApplication%s",
-		request.Device.Geo.Country,
-		request.Device.Os,
-		request.App.Bundle)
-	hasher := md5.New()
-	hasher.Write([]byte(str))
-	return fmt.Sprintf("stat:%s",hex.EncodeToString(hasher.Sum(nil)))
+    // Из реквизитов запроса делаем md5 сумму для хранения
+    // статистики в БД
+    str := fmt.Sprintf(
+        "Country-%sPlatform-%sApplication%s",
+        request.Device.Geo.Country,
+        request.Device.Os,
+        request.App.Bundle)
+    hasher := md5.New()
+    hasher.Write([]byte(str))
+    return fmt.Sprintf("stat:%s",hex.EncodeToString(hasher.Sum(nil)))
 }
 
 
 func setStat(request *JsonMainRequest) error {
 
-	client := redis.NewClient(&redis.Options{
+    client := redis.NewClient(&redis.Options{
         Addr:     RedisAddr,
         Password: RedisPassword,
         DB:       RedisDB, 
     })
 
-    key := MakeKeyForStatistics(request)
+    string statKey = "stats:all:keys"
+    string key = MakeKeyForStatistics(request)
+
+    client.SAdd(statKey, key)
 
     // Проверяем ключ на наличие и в случае отсутствия, вносим данные
     if val, _ := client.Exists(key).Result(); val == 0 {
-    	client.HSet(key, "country",  request.Device.Geo.Country)
-    	client.HSet(key, "platform", request.Device.Os)
-    	client.HSet(key, "app",      request.App.Bundle)
+        client.HSet(key, "country",  request.Device.Geo.Country).Err()
+        client.HSet(key, "platform", request.Device.Os).Err()
+        client.HSet(key, "app",      request.App.Bundle).Err()
     }
 
     client.HIncrBy(key, "count", 1)
 
     fmt.Println(client.HGetAll(key).Result())
+    fmt.Println(client.SMembers(statKey).Result())
 
     return nil
 }
@@ -110,25 +114,25 @@ func getCount(request *JsonMainRequest) string {
         DB:       RedisDB,
     })
 
-    key := request.Device.Ifa
+    string key = request.Device.Ifa
 
     timeExpire, _ := client.TTL(key).Result()
     if timeExpire == keyDontExist {
-    	if err := client.Incr(key).Err(); err != nil {
-    		panic(err)
-    	}
-    	if err := client.Expire(key, timeOut).Err(); err != nil {
-    		panic(err)
-    	}
+        if err := client.Incr(key).Err(); err != nil {
+            panic(err)
+        }
+        if err := client.Expire(key, timeOut).Err(); err != nil {
+            panic(err)
+        }
     } else {
-    	if timeOut - timeExpire > timeSameRequest {
-    		if err := client.Incr(key).Err(); err != nil {
-    			panic(err)
-    		}
-    	}
-    	if err := client.Expire(key, timeOut).Err(); err != nil {
-    		panic(err)
-    	}
+        if timeOut - timeExpire > timeSameRequest {
+            if err := client.Incr(key).Err(); err != nil {
+                panic(err)
+            }
+        }
+        if err := client.Expire(key, timeOut).Err(); err != nil {
+            panic(err)
+        }
     }
 
     count, _ := client.Get(key).Result()
@@ -140,29 +144,29 @@ func getCount(request *JsonMainRequest) string {
 
 
 type JsonMainRequest struct {
-	App struct {
-		Bundle string `json:"bundle"`
-	} `json:"app"`
-	Device struct {
-		Ifa string `json:"ifa"`
-		Os  string `json:"os"`
-		Geo struct {
-			Country  string `json:"country"`
-		} `json:"geo"`
-	} `json:"device"`
+    App struct {
+        Bundle string `json:"bundle"`
+    } `json:"app"`
+    Device struct {
+        Ifa string `json:"ifa"`
+        Os  string `json:"os"`
+        Geo struct {
+            Country  string `json:"country"`
+        } `json:"geo"`
+    } `json:"device"`
 }
 
 
 type JsonMainResponse struct {
-	Pos string `json:"pos"`
+    Pos string `json:"pos"`
 }
 
 
 type JsonStatResponse struct {
-	Statistics []struct {
-		Country  string `json:"country"`
-		App      string `json:"app"`
-		Platform string `json:"platform"`
-		Count    int    `json:"count"`
-	} `json:"Statistics"`
+    Statistics []struct {
+        Country  string `json:"country"`
+        App      string `json:"app"`
+        Platform string `json:"platform"`
+        Count    int    `json:"count"`
+    } `json:"Statistics"`
 }
