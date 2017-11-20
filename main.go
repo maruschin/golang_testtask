@@ -44,9 +44,10 @@ func mainRequestHandler(w http.ResponseWriter, r *http.Request) {
     	return
     }
 
-    res.Pos = getContFromDB(&req)
+    res.Pos = getCount(&req)
+    //setStat(&req)
     valueB, _ := json.Marshal(&res)
-    
+
     fmt.Fprintf(w, "%s\n", string(valueB))
 }
 
@@ -66,11 +67,11 @@ func MakeKeyForStatistics(request *JsonMainRequest) string {
 		request.App.Bundle)
 	hasher := md5.New()
 	hasher.Write([]byte(str))
-	return hex.EncodeToString(hasher.Sum(nil))
+	return fmt.Sprintf("stat:%s",hex.EncodeToString(hasher.Sum(nil)))
 }
 
 
-func getContFromDB(request *JsonMainRequest) string {
+func getCount(request *JsonMainRequest) string {
 
     client := redis.NewClient(&redis.Options{
         Addr:     "localhost:6379",
@@ -100,11 +101,11 @@ func getContFromDB(request *JsonMainRequest) string {
     	}
     }
 
-    value, _ := client.Get(key).Result()
+    count, _ := client.Get(key).Result()
 
     fmt.Println(key, timeExpire, value)
 
-    return value
+    return count
 }
 
 
