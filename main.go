@@ -2,22 +2,20 @@ package main
 
 
 import (
-    "encoding/json"
+    "os"
     "fmt"
     "log"
     "time"
     "strconv"
     "net/http"
-    "github.com/go-redis/redis"
     "crypto/md5"
     "encoding/hex"
+    "encoding/json"
+    "github.com/gorilla/mux"
+    "github.com/go-redis/redis"
 )
 
 
-// Время, в рамках которого, все запросы будем принимать за один
-const timeSameRequest = time.Second * 5
-// Время, после которого необходимо обнулять счетчик
-const timeOut = time.Minute * 10
 // Коды статусов ответов HTTP
 const httpBadRequest = 400
 const httpOk         = 200
@@ -26,21 +24,36 @@ const httpOk         = 200
 const keyDontExist   = -2
 const keyNeverExpire = -1
 
-// Настройки Redis
-const RedisAddr     = "localhost:6379"
-const RedisPassword = "" // no password set
-const RedisDB       = 0  // use default DB
-
 // Другие настройки
-const statKey = "stats:all:keys"
-
+const statKey    = "stats:all:keys"
+const configPath = "config.json"
 
 
 func main() {
-    http.HandleFunc("/", mainRequestHandler)
-    http.HandleFunc("/stats", statisticsRequestHandler)
+    router := mux.NewRouter()
+    router.HandleFunc("/", mainRequestHandler)
+    router.HandleFunc("/stats", statisticsRequestHandler)
+    srv := &http.Server{
+        Handler: router,
+        Addr:    ":8080",
+        WriteTimeout: 1000 * time.Millisecond,
+        ReadTimeout:  1000 * time.Millisecond,
+    }
+    log.Fatal(srv.ListenAndServe())
+}
 
-    log.Fatal(http.ListenAndServe(":8080", nil))
+
+func getConfig(file string) JsonConfig {
+    var config JsonConfig
+    configFile, err := os.Open(file)
+    defer configFile.Close()
+    if err != nil {
+        panic(err)
+    }
+    if err := json.NewDecoder(configFile).Decode(&config); err != nil {
+        panic(err)
+    }
+    return config
 }
 
 
@@ -48,7 +61,7 @@ func mainRequestHandler(w http.ResponseWriter, r *http.Request) {
 
     var req JsonMainRequest
     var res JsonMainResponse
-    
+
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
         w.WriteHeader(httpBadRequest)
         return
@@ -64,15 +77,15 @@ func mainRequestHandler(w http.ResponseWriter, r *http.Request) {
 
 func statisticsRequestHandler(w http.ResponseWriter, r *http.Request) {
 
-	var res JsonStatResponse
+    var res JsonStatResponse
 
-	if err := getStat(&res); err != nil {
-		panic(err)
-	}
+    if err := getStat(&res); err != nil {
+        panic(err)
+    }
 
-	valueB, _ := json.Marshal(&res)
+    valueB, _ := json.Marshal(&res)
 
-	fmt.Fprintf(w, "%s\n", string(valueB))
+    fmt.Fprintf(w, "%s\n", string(valueB))
 }
 
 
@@ -92,10 +105,12 @@ func MakeKeyForStatistics(request *JsonMainRequest) string {
 
 func getStat(response *JsonStatResponse) error {
 
+    config := getConfig(configPath)
+
     client := redis.NewClient(&redis.Options{
-        Addr:     RedisAddr,
-        Password: RedisPassword,
-        DB:       RedisDB,
+        Addr:     config.RedisAddr,
+        Password: config.RedisPassword,
+        DB:       config.RedisDB,
     })
 
     keys, _ := client.SMembers(statKey).Result()
@@ -112,22 +127,26 @@ func getStat(response *JsonStatResponse) error {
         response.Statistics = append(response.Statistics, structEntry)
     }
 
+    client.Close()
+
     return nil
 }
 
 
 func setStat(request *JsonMainRequest) error {
 
+    config := getConfig(configPath)
+
     client := redis.NewClient(&redis.Options{
-        Addr:     RedisAddr,
-        Password: RedisPassword,
-        DB:       RedisDB, 
+        Addr:     config.RedisAddr,
+        Password: config.RedisPassword,
+        DB:       config.RedisDB,
     })
 
     var key string = MakeKeyForStatistics(request)
 
     if err := client.SAdd(statKey, key).Err(); err != nil {
-    	panic(err)
+        panic(err)
     }
 
     // Проверяем ключ на наличие и в случае отсутствия, вносим данные
@@ -138,8 +157,10 @@ func setStat(request *JsonMainRequest) error {
     }
 
     if err := client.HIncrBy(key, "count", 1).Err(); err != nil {
-    	panic(err)
+        panic(err)
     }
+
+    client.Close()
 
     return nil
 }
@@ -147,10 +168,15 @@ func setStat(request *JsonMainRequest) error {
 
 func getCount(request *JsonMainRequest) string {
 
+    config := getConfig(configPath)
+
+    timeOut         := time.Duration(config.TimeOut) * time.Second
+    timeSameRequest := time.Duration(config.TimeSameRequest) * time.Second
+
     client := redis.NewClient(&redis.Options{
-        Addr:     RedisAddr,
-        Password: RedisPassword, 
-        DB:       RedisDB,
+        Addr:     config.RedisAddr,
+        Password: config.RedisPassword,
+        DB:       config.RedisDB,
     })
 
     var key string = request.Device.Ifa
@@ -175,6 +201,8 @@ func getCount(request *JsonMainRequest) string {
     }
 
     count, _ := client.Get(key).Result()
+
+    client.Close()
 
     return count
 }
@@ -203,9 +231,19 @@ type JsonStatResponse struct {
     Statistics []JsonStatStatistics `json:"statistics"`
 }
 
+
 type JsonStatStatistics struct {
     Country  string `json:"country"`
     App      string `json:"app"`
     Platform string `json:"platform"`
     Count    int    `json:"count"`
+}
+
+
+type JsonConfig struct {
+    TimeSameRequest int    `json:"time_same_request"`
+    TimeOut         int    `json:"time_out"`
+    RedisAddr       string `json:"redis_addr"`
+    RedisPassword   string `json:"redis_password"`
+    RedisDB         int    `json:"redis_db"`
 }
