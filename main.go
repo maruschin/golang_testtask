@@ -173,6 +173,9 @@ func setStat(request *JsonMainRequest) error {
 func getCount(request *JsonMainRequest) string {
     
     config := getConfig(configPath)
+    
+    timeOut         := config.timeOut * time.Second
+    timeSameRequest := config.timeSameRequest * time.Second
 
     client := redis.NewClient(&redis.Options{
         Addr:     config.redisAddr,
@@ -187,11 +190,11 @@ func getCount(request *JsonMainRequest) string {
         if err := client.Incr(key).Err(); err != nil {
             panic(err)
         }
-        if err := client.Expire(key, config.timeOut).Err(); err != nil {
+        if err := client.Expire(key, timeOut).Err(); err != nil {
             panic(err)
         }
     } else {
-        if timeOut - timeExpire > config.timeSameRequest {
+        if timeOut - timeExpire > timeSameRequest {
             if err := client.Incr(key).Err(); err != nil {
                 panic(err)
             }
