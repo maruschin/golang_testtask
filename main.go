@@ -3,6 +3,7 @@ package main
 
 import (
     "encoding/json"
+    "os"
     "fmt"
     "log"
     "time"
@@ -15,10 +16,6 @@ import (
 )
 
 
-// Время, в рамках которого, все запросы будем принимать за один
-const timeSameRequest = time.Second * 5
-// Время, после которого необходимо обнулять счетчик
-const timeOut = time.Minute * 10
 // Коды статусов ответов HTTP
 const httpBadRequest = 400
 const httpOk         = 200
@@ -27,16 +24,31 @@ const httpOk         = 200
 const keyDontExist   = -2
 const keyNeverExpire = -1
 
-// Настройки Redis
-const RedisAddr     = "localhost:6379"
-const RedisPassword = "" // no password set
-const RedisDB       = 0  // use default DB
-
 // Другие настройки
 const statKey = "stats:all:keys"
 
+//const timeSameRequest = time.Second * 5
+//const timeOut = time.Minute * 10
+//const RedisAddr     = "localhost:6379"
+//const RedisPassword = "" // no password set
+//const RedisDB       = 0  // use default DB
+
+
 
 func main() {
+
+    var config JsonConfig
+
+    file, err := os.Open("config.json"); if err != nil {panic(err)}
+    decoder := json.NewDecoder(file)
+    if err := decoder.Decode(&config); err!=nil {panic(err)}
+
+    var timeSameRequest int    = config.timeSameRequest
+    var timeOut         int    = config.timeOut
+    var RedisAddr       string = config.redisAddr
+    var RedisPassword   string = config.redisPassword
+    var RedisDB         int    = config.redisDB
+
     router := mux.NewRouter()
     router.HandleFunc("/", mainRequestHandler)
     router.HandleFunc("/stats", statisticsRequestHandler)
@@ -50,17 +62,30 @@ func main() {
 }
 
 
+func getConfig(str string) struct JsonConfig {
+    var config JsonConfig
+
+    file, err := os.Open("config.json"); if err != nil {panic(err)}
+    decoder := json.NewDecoder(file)
+    if err := decoder.Decode(&config); err!=nil {panic(err)}
+
+
+}
+
+
 func mainRequestHandler(w http.ResponseWriter, r *http.Request) {
 
     var req JsonMainRequest
     var res JsonMainResponse
+
+    config := getConfig(configPath)
 
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
         w.WriteHeader(httpBadRequest)
         return
     }
 
-    res.Pos = getCount(&req)
+    res.Pos = getCount(&req, &config)
     setStat(&req)
     valueB, _ := json.Marshal(&res)
 
@@ -215,9 +240,19 @@ type JsonStatResponse struct {
     Statistics []JsonStatStatistics `json:"statistics"`
 }
 
+
 type JsonStatStatistics struct {
     Country  string `json:"country"`
     App      string `json:"app"`
     Platform string `json:"platform"`
     Count    int    `json:"count"`
+}
+
+
+type JsonConfig struct {
+    timeSameRequest int    `json:"time_same_request"`
+    timeOut         int    `json:"time_out"`
+    redisAddr       string `json:"redis_addr"`
+    redisPassword   string `json:"redis_password"`
+    redisDB         int    `json:"redis_db"`
 }
