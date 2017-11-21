@@ -50,10 +50,10 @@ func main() {
 }
 
 
-func getConfig(str string) struct JsonConfig {
+func getConfig(path string) JsonConfig {
     var config JsonConfig
 
-    file, err := os.Open("config.json"); if err != nil {panic(err)}
+    file, err := os.Open(path); if err != nil {panic(err)}
     decoder := json.NewDecoder(file)
     if err := decoder.Decode(&config); err!=nil {panic(err)}
 
