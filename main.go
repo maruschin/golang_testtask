@@ -174,8 +174,8 @@ func getCount(request *JsonMainRequest) string {
     
     config := getConfig(configPath)
     
-    timeOut         := config.timeOut * time.Second
-    timeSameRequest := config.timeSameRequest * time.Second
+    timeOut         := time.Duration(config.timeOut)
+    timeSameRequest := time.Duration(time.Second)
 
     client := redis.NewClient(&redis.Options{
         Addr:     config.redisAddr,
