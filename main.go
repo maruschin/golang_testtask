@@ -8,9 +8,10 @@ import (
     "time"
     "strconv"
     "net/http"
-    "github.com/go-redis/redis"
     "crypto/md5"
     "encoding/hex"
+    "github.com/go-redis/redis"
+    "github.com/gorilla/mux"
 )
 
 
@@ -37,10 +38,10 @@ const statKey = "stats:all:keys"
 
 
 func main() {
-    http.HandleFunc("/", mainRequestHandler)
-    http.HandleFunc("/stats", statisticsRequestHandler)
-
-    log.Fatal(http.ListenAndServe(":8080", nil))
+    router := mux.NewRouter()
+    router.HandleFunc("/", mainRequestHandler)
+    router.HandleFunc("/stats", statisticsRequestHandler)
+    log.Fatal(http.ListenAndServe(":8080", router))
 }
 
 
@@ -48,7 +49,7 @@ func mainRequestHandler(w http.ResponseWriter, r *http.Request) {
 
     var req JsonMainRequest
     var res JsonMainResponse
-    
+
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
         w.WriteHeader(httpBadRequest)
         return
