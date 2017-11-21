@@ -36,12 +36,17 @@ const RedisDB       = 0  // use default DB
 const statKey = "stats:all:keys"
 
 
-
 func main() {
     router := mux.NewRouter()
     router.HandleFunc("/", mainRequestHandler)
     router.HandleFunc("/stats", statisticsRequestHandler)
-    log.Fatal(http.ListenAndServe(":8080", router))
+    srv := &http.Server{
+        Handler: router,
+        Addr:    ":8080",
+        WriteTimeout: 100 * time.Millisecond,
+        ReadTimeout:  100 * time.Millisecond,
+    }
+    log.Fatal(srv.ListenAndServe())
 }
 
 
@@ -65,15 +70,15 @@ func mainRequestHandler(w http.ResponseWriter, r *http.Request) {
 
 func statisticsRequestHandler(w http.ResponseWriter, r *http.Request) {
 
-	var res JsonStatResponse
+    var res JsonStatResponse
 
-	if err := getStat(&res); err != nil {
-		panic(err)
-	}
+    if err := getStat(&res); err != nil {
+        panic(err)
+    }
 
-	valueB, _ := json.Marshal(&res)
+    valueB, _ := json.Marshal(&res)
 
-	fmt.Fprintf(w, "%s\n", string(valueB))
+    fmt.Fprintf(w, "%s\n", string(valueB))
 }
 
 
@@ -113,6 +118,8 @@ func getStat(response *JsonStatResponse) error {
         response.Statistics = append(response.Statistics, structEntry)
     }
 
+    client.Close()
+
     return nil
 }
 
@@ -122,13 +129,13 @@ func setStat(request *JsonMainRequest) error {
     client := redis.NewClient(&redis.Options{
         Addr:     RedisAddr,
         Password: RedisPassword,
-        DB:       RedisDB, 
+        DB:       RedisDB,
     })
 
     var key string = MakeKeyForStatistics(request)
 
     if err := client.SAdd(statKey, key).Err(); err != nil {
-    	panic(err)
+        panic(err)
     }
 
     // Проверяем ключ на наличие и в случае отсутствия, вносим данные
@@ -139,8 +146,10 @@ func setStat(request *JsonMainRequest) error {
     }
 
     if err := client.HIncrBy(key, "count", 1).Err(); err != nil {
-    	panic(err)
+        panic(err)
     }
+
+    client.Close()
 
     return nil
 }
@@ -150,7 +159,7 @@ func getCount(request *JsonMainRequest) string {
 
     client := redis.NewClient(&redis.Options{
         Addr:     RedisAddr,
-        Password: RedisPassword, 
+        Password: RedisPassword,
         DB:       RedisDB,
     })
 
@@ -176,6 +185,8 @@ func getCount(request *JsonMainRequest) string {
     }
 
     count, _ := client.Get(key).Result()
+
+    client.Close()
 
     return count
 }
