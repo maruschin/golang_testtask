@@ -50,13 +50,21 @@ func main() {
 }
 
 
-func getConfig(path string) JsonConfig {
+func getConfig(file string) JsonConfig {
     var config JsonConfig
-
-    file, err := os.Open(path); if err != nil {panic(err)}
-    decoder := json.NewDecoder(file)
-    if err := decoder.Decode(&config); err!=nil {panic(err)}
-
+    cwd, _ := os.Getwd()
+    configFile, err := os.Open(fmt.Sprintf("%s/%s", cwd, file))
+    defer configFile.Close()
+    fmt.Println(fmt.Sprintf("%s/%s", cwd, file))
+    if err != nil {
+        panic(err)
+    }
+    if err := json.NewDecoder(configFile).Decode(&config); err != nil {
+        panic(err)
+    }
+    fmt.Println(file)
+    fmt.Println(config)
+    fmt.Println(os.Getwd())
     return config
 }
 
@@ -108,13 +116,13 @@ func MakeKeyForStatistics(request *JsonMainRequest) string {
 
 
 func getStat(response *JsonStatResponse) error {
-    
+
     config := getConfig(configPath)
 
     client := redis.NewClient(&redis.Options{
-        Addr:     config.redisAddr,
-        Password: config.redisPassword,
-        DB:       config.redisDB,
+        Addr:     config.RedisAddr,
+        Password: config.RedisPassword,
+        DB:       config.RedisDB,
     })
 
     keys, _ := client.SMembers(statKey).Result()
@@ -138,13 +146,13 @@ func getStat(response *JsonStatResponse) error {
 
 
 func setStat(request *JsonMainRequest) error {
-    
+
     config := getConfig(configPath)
 
     client := redis.NewClient(&redis.Options{
-        Addr:     config.redisAddr,
-        Password: config.redisPassword,
-        DB:       config.redisDB,
+        Addr:     config.RedisAddr,
+        Password: config.RedisPassword,
+        DB:       config.RedisDB,
     })
 
     var key string = MakeKeyForStatistics(request)
@@ -171,16 +179,16 @@ func setStat(request *JsonMainRequest) error {
 
 
 func getCount(request *JsonMainRequest) string {
-    
+
     config := getConfig(configPath)
-    
-    timeOut         := time.Duration(config.timeOut)
-    timeSameRequest := time.Duration(time.Second)
+
+    timeOut         := time.Duration(config.TimeOut)
+    timeSameRequest := time.Duration(config.TimeSameRequest)
 
     client := redis.NewClient(&redis.Options{
-        Addr:     config.redisAddr,
-        Password: config.redisPassword,
-        DB:       config.redisDB,
+        Addr:     config.RedisAddr,
+        Password: config.RedisPassword,
+        DB:       config.RedisDB,
     })
 
     var key string = request.Device.Ifa
@@ -245,9 +253,9 @@ type JsonStatStatistics struct {
 
 
 type JsonConfig struct {
-    timeSameRequest int    `json:"time_same_request"`
-    timeOut         int    `json:"time_out"`
-    redisAddr       string `json:"redis_addr"`
-    redisPassword   string `json:"redis_password"`
-    redisDB         int    `json:"redis_db"`
+    TimeSameRequest int    `json:"time_same_request"`
+    TimeOut         int    `json:"time_out"`
+    RedisAddr       string `json:"redis_addr"`
+    RedisPassword   string `json:"redis_password"`
+    RedisDB         int    `json:"redis_db"`
 }
