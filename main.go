@@ -2,7 +2,6 @@ package main
 
 
 import (
-    "encoding/json"
     "os"
     "fmt"
     "log"
@@ -11,8 +10,9 @@ import (
     "net/http"
     "crypto/md5"
     "encoding/hex"
-    "github.com/go-redis/redis"
+    "encoding/json"
     "github.com/gorilla/mux"
+    "github.com/go-redis/redis"
 )
 
 
@@ -28,13 +28,6 @@ const keyNeverExpire = -1
 const statKey    = "stats:all:keys"
 const configPath = "config.json"
 
-//const timeSameRequest = time.Second * 5
-//const timeOut = time.Minute * 10
-//const RedisAddr     = "localhost:6379"
-//const RedisPassword = "" // no password set
-//const RedisDB       = 0  // use default DB
-
-
 
 func main() {
     router := mux.NewRouter()
@@ -43,8 +36,8 @@ func main() {
     srv := &http.Server{
         Handler: router,
         Addr:    ":8080",
-        WriteTimeout: 100 * time.Millisecond,
-        ReadTimeout:  100 * time.Millisecond,
+        WriteTimeout: 1000 * time.Millisecond,
+        ReadTimeout:  1000 * time.Millisecond,
     }
     log.Fatal(srv.ListenAndServe())
 }
@@ -52,19 +45,14 @@ func main() {
 
 func getConfig(file string) JsonConfig {
     var config JsonConfig
-    cwd, _ := os.Getwd()
-    configFile, err := os.Open(fmt.Sprintf("%s/%s", cwd, file))
+    configFile, err := os.Open(file)
     defer configFile.Close()
-    fmt.Println(fmt.Sprintf("%s/%s", cwd, file))
     if err != nil {
         panic(err)
     }
     if err := json.NewDecoder(configFile).Decode(&config); err != nil {
         panic(err)
     }
-    fmt.Println(file)
-    fmt.Println(config)
-    fmt.Println(os.Getwd())
     return config
 }
 
@@ -182,8 +170,8 @@ func getCount(request *JsonMainRequest) string {
 
     config := getConfig(configPath)
 
-    timeOut         := time.Duration(config.TimeOut)
-    timeSameRequest := time.Duration(config.TimeSameRequest)
+    timeOut         := time.Duration(config.TimeOut) * time.Second
+    timeSameRequest := time.Duration(config.TimeSameRequest) * time.Second
 
     client := redis.NewClient(&redis.Options{
         Addr:     config.RedisAddr,
