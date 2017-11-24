@@ -27,9 +27,13 @@ const keyNeverExpire = -1
 // Другие настройки
 const statKey    = "stats:all:keys"
 const configPath = "config.json"
+var config JsonConfig
 
 
 func main() {
+    if err := getConfig(configPath); err != nil {
+        panic(err)
+    }
     router := mux.NewRouter()
     router.HandleFunc("/", mainRequestHandler)
     router.HandleFunc("/stats", statisticsRequestHandler)
@@ -43,17 +47,16 @@ func main() {
 }
 
 
-func getConfig(file string) JsonConfig {
-    var config JsonConfig
+func getConfig(file string) error {
     configFile, err := os.Open(file)
     defer configFile.Close()
     if err != nil {
-        panic(err)
+        return err
     }
     if err := json.NewDecoder(configFile).Decode(&config); err != nil {
-        panic(err)
+        return err
     }
-    return config
+    return nil
 }
 
 
@@ -105,8 +108,6 @@ func MakeKeyForStatistics(request *JsonMainRequest) string {
 
 func getStat(response *JsonStatResponse) error {
 
-    config := getConfig(configPath)
-
     client := redis.NewClient(&redis.Options{
         Addr:     config.RedisAddr,
         Password: config.RedisPassword,
@@ -134,8 +135,6 @@ func getStat(response *JsonStatResponse) error {
 
 
 func setStat(request *JsonMainRequest) error {
-
-    config := getConfig(configPath)
 
     client := redis.NewClient(&redis.Options{
         Addr:     config.RedisAddr,
@@ -167,8 +166,6 @@ func setStat(request *JsonMainRequest) error {
 
 
 func getCount(request *JsonMainRequest) string {
-
-    config := getConfig(configPath)
 
     timeOut         := time.Duration(config.TimeOut) * time.Second
     timeSameRequest := time.Duration(config.TimeSameRequest) * time.Second
